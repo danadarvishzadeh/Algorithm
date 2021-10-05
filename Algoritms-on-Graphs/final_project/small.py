@@ -55,17 +55,7 @@ class DistPreprocessSmall:
         q = PriorityQueue()
         shortcut_count = 1
         for v in range(n):
-            q.put((self.compute_importance(v) ,v))
-        while not q.empty():
-            importance, v = q.simple_get()
-            new_importance = self.compute_importance(v)
-            if q.last(new_importance):
-                q.put((new_importance ,v))
-                continue
             self.add_shortcut(v)
-            self.contracted[v] = 1
-            self.rank[v] = shortcut_count
-            shortcut_count += 1
 
     def edge_difference(self, v):
         count = 0
@@ -105,8 +95,6 @@ class DistPreprocessSmall:
                     self.cost[ur].append(c+cr)
                     self.adjr[u].append(ur)
                     self.costr[u].append(c+cr)
-        self.update_node_order(v)
-
 
     def update_node_order(self, v):
         for u in self.adj[v]:

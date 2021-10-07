@@ -25,6 +25,9 @@ class PriorityQueue:
     def simple_get(self):
         return heappop(self.H)
 
+    def clear(self):
+        self.H = []
+
     def last(self, imp):
         if self.empty():
             return False
@@ -38,39 +41,41 @@ class DistPreprocessSmall:
         self.cost = cost
         self.n = n
         self.inf = 2 * 10**6 * n
-        self.rank = dict()
-        self.preprocessd = set()
+        self.rank = [self.inf for _ in range(n)]
+        self.edge_difference_only = True
 
     def preprocess(self):
         rank = 1
+        #self.edge_difference_only = False
         for v in range(self.n):
             self.rank[v] = rank
             rank += 1
-            self.add_shortcuts(v)
+            self.process_node(v)
 
-    def filter_processed(self, v, u, side):
-        return list(filter(lambda x: self.rank.get(x[1], self.n+1) > self.rank[v], zip(self.cost[side][u], self.adj[side][u])))
+    #def filter_processed(self, v, u, side):
+    #    return list(filter(lambda x: self.rank[x[1]] > self.rank[v], zip(self.cost[side][u], self.adj[side][u])))
 
-    def add_shortcuts(self, v):
-        prev = self.filter_processed(v, v, 1)
-        after = self.filter_processed(v, v, 0)
+    def add_edge(self, u, w, c):
+        self.adj[0][u].append(w)
+        self.cost[0][u].append(c)
+        self.adj[1][w].append(u)
+        self.cost[1][w].append(c)
+
+    def process_node(self, v):
+        rank_v = self.rank[v]
         limit = 0
-        if prev:
-            limit += max(prev)[0]
-        if after:
-            limit += max(after)[0]
-        for cr, ur in prev:
-            for c, u in after:
-                #one_hop_back = self.filter_processed(v, u, 1)
-                #if one_hop_back:
-                #    l = limit - min(one_hop_back)[0]
-                #else:
-                #    l = limit
+        if self.cost[0][v]:
+            limit += max(self.cost[0][v])
+        for cr, ur in zip(self.cost[1][v], self.adj[1][v]):
+            if rank_v > self.rank[ur]:
+                continue
+            limit += cr
+            for c, u in zip(self.cost[0][v], self.adj[0][v]):
+                if rank_v > self.rank[u]:
+                    continue
+                limit -= min(self.cost[1][u])
                 if self.pre_dij(ur, u, v, limit) > c + cr:
-                    self.adj[0][ur].append(u)
-                    self.cost[0][ur].append(c + cr)
-                    self.adj[1][u].append(ur)
-                    self.cost[1][u].append(c + cr)
+                    self.add_edge(ur, u, c+cr)
 
     def pre_dij(self, s, t, v, l):
         dist = dict()
@@ -82,7 +87,7 @@ class DistPreprocessSmall:
             if u == t or dist[u] > l:
                 break
             dist_u = dist[u]
-            for x, v_ in zip(self.cost[0][u], self.adj[0][u]):
+            for c, v_ in zip(self.cost[0][u], self.adj[0][u]):
                 if v_ == v:
                     continue
                 dist_v_ = dist.get(v_, self.inf)
@@ -101,32 +106,52 @@ class DistPreprocessSmall:
         dist[1][t] = 0
         q[0].put((0, s))
         q[1].put((0, t))
-        flag = True
-        while flag:
-            flag = False
+        while not q[0].empty() or not q[1].empty():
             if not q[0].empty():
                 u = q[0].get()
+        #        print('u', u+1)
                 if dist[0][u] <= estimate:
                     self.process(u, dist, q, proc, 0)
-                    flag = True
+                else:
+                    q[0].clear()
                 if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
                     estimate = dist[0][u] + dist[1][u]
+                    if estimate == 3388:
+                        print('answer:', 'u:', u+1)
             if not q[1].empty():
                 ur = q[1].get()
+        #        print('ur', ur+1)
                 if dist[1][ur] <= estimate:
                     self.process(ur, dist, q, proc, 1)
-                    flag = True
+                else:
+                    q[1].clear()
                 if ur in proc[0] and dist[0][ur] + dist[1][ur] < estimate:
                     estimate = dist[0][ur] + dist[1][ur]
-        return dist[0].get(t, -1)
+                    if estimate == 3388:
+                        print('answer:', 'ur:', ur+1)
+        return estimate if estimate < self.inf else -1
+
+    def debug_string(self):
+        for u in range(self.n):
+            for v, c in zip(self.adj[0][u], self.cost[0][u]):
+                print(u+1, v+1, c)
 
     def process(self, u, dist, q, proc, side):
         dist_u = dist[side][u]
+        #print()
+        #print('side', side)
         for v, c in zip(self.adj[side][u], self.cost[side][u]):
-            #if self.rank[v] < self.rank[u]:
-            #    continue
+            #print('v', v+1)
+            #print('u', u+1)
+            if self.rank[v] < self.rank[u]:
+            #    print('here')
+                continue
             dist_v = dist[side].get(v, self.inf)
             sum_ = dist_u + c
+            #if sum_ == 3081:
+            #    print('answer:', 'u:', u+1, 'v:', v+1)
+            #if sum_ == 3388:
+            #    print('answer:', 'u:', u+1, 'v:', v+1)
             if dist_v > sum_:
                 dist[side][v] = sum_
                 q[side].put((sum_, v))
@@ -155,4 +180,8 @@ if __name__ == '__main__':
     t, = readl()
     for i in range(t):
         s, t = readl()
+        #ch.debug_string()
+        #print(s, t)
         print(ch.query(s-1, t-1))
+        #if s ==7:
+        #    break

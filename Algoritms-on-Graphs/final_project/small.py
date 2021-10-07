@@ -17,10 +17,10 @@ class PriorityQueue:
         self.obsolete.add(self.H[0][1])
         return heappop(self.H)[1]
 
-    def empty(self):
+    def __bool__(self):
         while self.H and self.H[0][1] in self.obsolete:
             heappop(self.H)
-        return len(self.H) == 0
+        return len(self.H) > 0
     
     def simple_get(self):
         return heappop(self.H)
@@ -42,18 +42,13 @@ class DistPreprocessSmall:
         self.n = n
         self.inf = 2 * 10**6 * n
         self.rank = [self.inf for _ in range(n)]
-        self.edge_difference_only = True
 
     def preprocess(self):
         rank = 1
-        #self.edge_difference_only = False
         for v in range(self.n):
             self.rank[v] = rank
             rank += 1
             self.process_node(v)
-
-    #def filter_processed(self, v, u, side):
-    #    return list(filter(lambda x: self.rank[x[1]] > self.rank[v], zip(self.cost[side][u], self.adj[side][u])))
 
     def add_edge(self, u, w, c):
         self.adj[0][u].append(w)
@@ -63,28 +58,28 @@ class DistPreprocessSmall:
 
     def process_node(self, v):
         rank_v = self.rank[v]
-        limit = 0
+        tmp = 0
         if self.cost[0][v]:
-            limit += max(self.cost[0][v])
+            tmp += max(self.cost[0][v])
         for cr, ur in zip(self.cost[1][v], self.adj[1][v]):
             if rank_v > self.rank[ur]:
                 continue
-            limit += cr
+            limit = tmp + cr
+            dist = self.pre_dij(ur, v, limit)
             for c, u in zip(self.cost[0][v], self.adj[0][v]):
                 if rank_v > self.rank[u]:
                     continue
-                limit -= min(self.cost[1][u])
-                if self.pre_dij(ur, u, v, limit) > c + cr:
-                    self.add_edge(ur, u, c+cr)
-
-    def pre_dij(self, s, t, v, l):
+                if dist.get(u, self.inf) > c + cr:
+                    self.add_edge(ur, u, c + cr)
+            
+    def pre_dij(self, s, v, limit):
         dist = dict()
         q = PriorityQueue()
         dist[s] = 0
         q.put((0, s))
-        while not q.empty():
+        while q:
             u = q.get()
-            if u == t or dist[u] > l:
+            if dist[u] > limit:
                 break
             dist_u = dist[u]
             for c, v_ in zip(self.cost[0][u], self.adj[0][u]):
@@ -95,7 +90,7 @@ class DistPreprocessSmall:
                 if dist_v_ > sum_:
                     dist[v_] = sum_
                     q.put((sum_, v_))
-        return dist.get(t, self.inf)
+        return dist
 
     def query(self, s, t):
         dist = [dict(), dict()]
@@ -106,8 +101,8 @@ class DistPreprocessSmall:
         dist[1][t] = 0
         q[0].put((0, s))
         q[1].put((0, t))
-        while not q[0].empty() or not q[1].empty():
-            if not q[0].empty():
+        while q[0] or q[1]:
+            if q[0]:
                 u = q[0].get()
         #        print('u', u+1)
                 if dist[0][u] <= estimate:
@@ -118,7 +113,7 @@ class DistPreprocessSmall:
                     estimate = dist[0][u] + dist[1][u]
                     if estimate == 3388:
                         print('answer:', 'u:', u+1)
-            if not q[1].empty():
+            if q[1]:
                 ur = q[1].get()
         #        print('ur', ur+1)
                 if dist[1][ur] <= estimate:

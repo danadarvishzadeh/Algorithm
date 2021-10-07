@@ -60,13 +60,13 @@ class DistPreprocessSmall:
         if after:
             limit += max(after)[0]
         for cr, ur in prev:
-            one_hop_back = self.filter_processed(v, ur, 1)
-            if one_hop_back:
-                l = limit - min(one_hop_back)[0]
-            else:
-                l = limit
             for c, u in after:
-                if self.pre_dij(ur, u, v, l) > c + cr:
+                #one_hop_back = self.filter_processed(v, u, 1)
+                #if one_hop_back:
+                #    l = limit - min(one_hop_back)[0]
+                #else:
+                #    l = limit
+                if self.pre_dij(ur, u, v, limit) > c + cr:
                     self.adj[0][ur].append(u)
                     self.cost[0][ur].append(c + cr)
                     self.adj[1][u].append(ur)
@@ -82,7 +82,9 @@ class DistPreprocessSmall:
             if u == t or dist[u] > l:
                 break
             dist_u = dist[u]
-            for c, v_ in self.filter_processed(v, u, 0):
+            for x, v_ in zip(self.cost[0][u], self.adj[0][u]):
+                if v_ == v:
+                    continue
                 dist_v_ = dist.get(v_, self.inf)
                 sum_ = dist_u + c
                 if dist_v_ > sum_:

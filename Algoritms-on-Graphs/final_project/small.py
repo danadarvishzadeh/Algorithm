@@ -34,166 +34,102 @@ class PriorityQueue:
 
 class DistPreprocessSmall:
     def __init__(self, n, adj, cost):
-        self.adj = adj[0]
-        self.adjr = adj[1]
-        self.cost = cost[0]
-        self.costr = cost[1]
+        self.adj = adj
+        self.cost = cost
+        self.n = n
         self.inf = 2 * 10**6 * n
-        self.contracted = dict()
         self.rank = dict()
-        self.cover = dict()
-        self.node_order = dict()
-
-    def compute_importance(self, v):
-        ed = self.edge_difference(v)
-        nc = self.contracted.get(v, 0)
-        sc = self.cover.get(v, 0)
-        nl = self.node_order.get(v, 0)
-        return ed + nc + sc + nl
+        self.preprocessd = set()
 
     def preprocess(self):
-        q = PriorityQueue()
-        shortcut_count = 1
-        for v in range(n):
-            self.add_shortcut(v)
+        rank = 1
+        for v in range(self.n):
+            self.rank[v] = rank
+            rank += 1
+            self.add_shortcuts(v)
 
-    def edge_difference(self, v):
-        count = 0
+    def filter_processed(self, v, u, side):
+        return list(filter(lambda x: self.rank.get(x[1], self.n+1) > self.rank[v], zip(self.cost[side][u], self.adj[side][u])))
+
+    def add_shortcuts(self, v):
+        prev = self.filter_processed(v, v, 1)
+        after = self.filter_processed(v, v, 0)
         limit = 0
-        cover = set()
-        if self.cost[v]:
-            limit += max(self.cost[v])
-        if self.costr[v]:
-            limit += max(self.costr[v])
-        for ur, cr in zip(self.adjr[v], self.costr[v]):
-            cover.add(ur)
-            for u, c in zip(self.adj[v], self.cost[v]):
-                cover.add(u)
-                if self.costr[u]:
-                    l = limit - min(self.costr[u])
-                else:
-                    l = limit
-                if self.preprocess_dijkstra(ur, u, v, l) > c + cr:
-                    count += 1
-        self.cover[v] = len(cover)
-        return count - len(self.adj[v]) - len(self.adjr[v])
+        if prev:
+            limit += max(prev)[0]
+        if after:
+            limit += max(after)[0]
+        for cr, ur in prev:
+            one_hop_back = self.filter_processed(v, ur, 1)
+            if one_hop_back:
+                l = limit - min(one_hop_back)[0]
+            else:
+                l = limit
+            for c, u in after:
+                if self.pre_dij(ur, u, v, l) > c + cr:
+                    self.adj[0][ur].append(u)
+                    self.cost[0][ur].append(c + cr)
+                    self.adj[1][u].append(ur)
+                    self.cost[1][u].append(c + cr)
 
-    def add_shortcut(self, v):
-        limit = 0
-        if self.cost[v]:
-            limit += max(self.cost[v])
-        if self.costr[v]:
-            limit += max(self.costr[v])
-        for ur, cr in zip(self.adjr[v], self.costr[v]):
-            for u, c in zip(self.adj[v], self.cost[v]):
-                if self.costr[u]:
-                    l = limit - min(self.costr[u])
-                else:
-                    l = limit
-                if self.preprocess_dijkstra(ur, u, v, l) > c + cr:
-                    self.adj[ur].append(u)
-                    self.cost[ur].append(c+cr)
-                    self.adjr[u].append(ur)
-                    self.costr[u].append(c+cr)
-
-    def update_node_order(self, v):
-        for u in self.adj[v]:
-            self.node_order[u] = self.node_order.get(v, 0) + 1
-        for u in self.adjr[v]:
-            self.node_order[u] = self.node_order.get(v, 0) + 1
-
-    def contracted_neighbors(self, v):
-        cn = 0
-        for u in self.adj[v]:
-            cn += self.contracted.get(u, 0)
-        for u in self.adjr[v]:
-            cn += self.contracted.get(u, 0)
-        return cn
-
-    def preprocess_dijkstra(self, s, t, v, limit):
+    def pre_dij(self, s, t, v, l):
         dist = dict()
         q = PriorityQueue()
         dist[s] = 0
         q.put((0, s))
         while not q.empty():
             u = q.get()
-            if dist[u] > limit:
+            if u == t or dist[u] > l:
                 break
-            if u == v:
-                continue
-            self.p_process(u, v, q, dist)
-            if u == t:
-                break
+            dist_u = dist[u]
+            for c, v_ in self.filter_processed(v, u, 0):
+                dist_v_ = dist.get(v_, self.inf)
+                sum_ = dist_u + c
+                if dist_v_ > sum_:
+                    dist[v_] = sum_
+                    q.put((sum_, v_))
         return dist.get(t, self.inf)
 
-    def p_process(self, u, r, q, dist):
-        for v, c in zip(self.adj[u], self.cost[u]):
-            if v == r:
-                continue
-            dist_v = dist.get(v, self.inf)
-            sum_ = dist[u] + c
-            if dist_v > sum_:
-                dist[v] = sum_
-                q.put((sum_, v))
-
-
-    def process(self, u):
-        for v, c in zip(self.adj[u], self.cost[u]):
-            dist_v = self.dist.get(v, self.inf)
-            sum_ = self.dist[u] + c
-            if dist_v > sum_:
-                self.dist[v] = sum_
-                self.q.put((sum_, v))
-
-    def processr(self, ur):
-        for v, c in zip(self.adjr[ur], self.costr[ur]):
-            distr_v = self.distr.get(v, self.inf)
-            sum_ = self.distr[ur] + c
-            if distr_v > sum_:
-                self.distr[v] = sum_
-                self.qr.put((sum_, v))
-
-    def initialise(self, s, t):
-        self.dist = dict()
-        self.distr = dict()
-        self.proc = set()
-        self.procr = set()
-        self.q = PriorityQueue()
-        self.qr = PriorityQueue()
-
-        self.dist[s] = 0
-        self.distr[t] = 0
-        self.q.put((0, s))
-        self.qr.put((0, t))
-
     def query(self, s, t):
-        self.initialise(s, t)
+        dist = [dict(), dict()]
+        proc = [set(), set()]
+        q = [PriorityQueue(), PriorityQueue()]
         estimate = self.inf
-        flag = 1
+        dist[0][s] = 0
+        dist[1][t] = 0
+        q[0].put((0, s))
+        q[1].put((0, t))
+        flag = True
         while flag:
-            flag = 0
-            if not self.q.empty():
-                u = self.q.get()
-                if self.dist[u] < estimate:
-                    self.process(u)
-                    flag = 1
-                    self.proc.add(u)
-                dist_u = self.dist.get(u, self.inf)
-                distr_u = self.distr.get(u, self.inf)
-                if u in self.procr and dist_u + distr_u < estimate:
-                    estimate = dist_u + distr_u
-            if not self.qr.empty():
-                ur = self.qr.get()
-                if self.distr[ur] < estimate:
-                    self.processr(ur)
-                    flag = 1
-                    self.procr.add(ur)
-                dist_ur = self.dist.get(ur, self.inf)
-                distr_ur = self.distr.get(ur, self.inf)
-                if ur in self.proc and dist_ur + distr_ur < estimate:
-                    estimate = dist_ur + distr_ur
+            flag = False
+            if not q[0].empty():
+                u = q[0].get()
+                if dist[0][u] <= estimate:
+                    self.process(u, dist, q, proc, 0)
+                    flag = True
+                if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
+                    estimate = dist[0][u] + dist[1][u]
+            if not q[1].empty():
+                ur = q[1].get()
+                if dist[1][ur] <= estimate:
+                    self.process(ur, dist, q, proc, 1)
+                    flag = True
+                if ur in proc[0] and dist[0][ur] + dist[1][ur] < estimate:
+                    estimate = dist[0][ur] + dist[1][ur]
+        return dist[0].get(t, -1)
 
-        return -1 if estimate == self.inf else estimate
+    def process(self, u, dist, q, proc, side):
+        dist_u = dist[side][u]
+        for v, c in zip(self.adj[side][u], self.cost[side][u]):
+            #if self.rank[v] < self.rank[u]:
+            #    continue
+            dist_v = dist[side].get(v, self.inf)
+            sum_ = dist_u + c
+            if dist_v > sum_:
+                dist[side][v] = sum_
+                q[side].put((sum_, v))
+        proc[side].add(u)
+
 
 def readl():
         return map(int, sys.stdin.readline().split())

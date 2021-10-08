@@ -25,127 +25,135 @@ class PriorityQueue:
     def simple_get(self):
         return heappop(self.H)
 
-    def clear(self):
-        self.H = []
-
-    def last(self, imp):
-        if self.empty():
-            return False
-        return self.H[0][0] < imp
-
-
 
 class DistPreprocessSmall:
     def __init__(self, n, adj, cost):
-        self.adj = adj
-        self.cost = cost
         self.n = n
-        self.inf = 2 * 10**6 * n
-        self.rank = [self.inf for _ in range(n)]
-        self.added = 0
+        self.inf = n * 2 * 10**6
+        self.adj = adj[0]
+        self.adjr = adj[1]
+        self.cost = cost[0]
+        self.costr = cost[1]
+        self.shortcut_added = 0
+        self.order = [i for i in range(n)]
+        self.fake = False
+        self.bidi = False
 
     def preprocess(self):
-        rank = 1
-        for v in range(self.n):
-            self.rank[v] = rank
-            rank += 1
-            self.process_node(v)
+        queue = PriorityQueue()
+        for i in range(self.n):
+            queue.put((i, i))
+        while queue:
+            v = queue.get()
+            next_edges = self.couple_edges(0, v, v)
+            previous_edges = self.couple_edges(1, v, v)
+            if next_edges:
+                l1 = max(next_edges)[0]
+            for s_cost , start in previous_edges:
+                limit = l1 + s_cost
+                for e_cost, end in next_edges:
+                    shortcut_cost = s_cost + e_cost
+                    witness_path = self.dijkstra(start, end, limit=limit, ignore=v)
+                    if witness_path > shortcut_cost:
+                        self.add_shortcut(start, end, shortcut_cost)
+        if self.debug:
+            self.debug_added_edges()
+            self.debug_graph()
 
-    def add_edge(self, u, w, c):
-        self.adj[0][u].append(w)
-        self.cost[0][u].append(c)
-        self.adj[1][w].append(u)
-        self.cost[1][w].append(c)
-        self.added += 1
+    def add_shortcut(self, start, end, weight):
+        self.adj[start].append(end)
+        self.adjr[end].append(start)
+        self.cost[start].append(weight)
+        self.costr[end].append(weight)
+        self.shortcut_added += 1
 
-    def filter_processed(self, side, filter_, set_):
-        return list(filter(lambda x: self.rank[x[1]] > self.rank[filter_], zip(self.cost[side][set_], self.adj[side][set_])))
+    def couple_edges(self, side, node, filter_ = None):
+        if side == 0:
+            coupled = list(zip(self.cost[node], self.adj[node]))
+        else:
+            coupled = list(zip(self.costr[node], self.adjr[node]))
+        if filter_ is not None:
+            coupled = list(filter(lambda x: self.compare_order(x[1], filter_), coupled))
+        return coupled
 
-    def process_node(self, v):
-        tmp = 0
-        prev = self.filter_processed(1, v, v)
-        after = self.filter_processed(0, v, v)
-        if after:
-            tmp += max(after)[0]
-        for cr, ur in prev:
-            limit = tmp + cr
-            dist = self.pre_dij(ur, v, limit, len(after), after)
-            for c, u in after:
-                if dist.get(u, self.inf) > c + cr:
-                    self.add_edge(ur, u, c + cr)
-            
-    def pre_dij(self, s, v, limit, unknown, after):
-        dist = dict()
-        q = PriorityQueue()
-        dist[s] = 0
-        q.put((0, s))
-        after = set(after)
-        while q and unknown > 0:
-            u = q.get()
-            if u in after:
-                unknown -= 1
-            if dist[u] > limit:
-                break
-            dist_u = dist[u]
-            for c, v_ in self.filter_processed(0, v, u):
-                #if v_ == v:
-                #    continue
-                dist_v_ = dist.get(v_, self.inf)
-                sum_ = dist_u + c
-                if dist_v_ > sum_:
-                    dist[v_] = sum_
-                    q.put((sum_, v_))
-        return dist
+    def compare_order(self, node, filter_):
+        return self.order[node] > self.order[filter_]
 
-    def query(self, s, t):
-        dist = [dict(), dict()]
-        proc = [set(), set()]
-        q = [PriorityQueue(), PriorityQueue()]
-        estimate = self.inf
-        dist[0][s] = 0
-        dist[1][t] = 0
-        q[0].put((0, s))
-        q[1].put((0, t))
-        while q[0] or q[1]:
+    def dijkstra(self, start, end, ignore=None, limit=False, bidi=False):
+        dist = [dict()]
+        q = [PriorityQueue()]
+        dist[0][start] = 0
+        q[0].put((0, start))
+        if self.bidi:
+            dist.append(dict())
+            q.append(PriorityQueue())
+            proc = [set(), set()]
+            dist[1][end] = 0
+            q[1].put((0, end))
+            proc[0].add(start)
+            proc[1].add(end)
+            estimate = self.inf
+        while any(q):
+            if self.bidi:
+                flag = False
             if q[0]:
                 u = q[0].get()
-        #        print('u', u+1)
-                if dist[0][u] <= estimate:
-                    self.process(u, dist, q, proc, 0)
+                if self.bidi:
+                    if dist[0][u] <= estimate:
+                        self.process(u, 0, dist[0], q[0], proc[0])
+                        flag = True
+                    if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
+                        estimate = dist[0][u] + dist[1][u]
                 else:
-                    q[0].clear()
-                if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
-                    estimate = dist[0][u] + dist[1][u]
-            if q[1]:
+                    if limit and dist[0][u] > limit:
+                        break
+                    if end and u == end:
+                        break
+                    self.process(u, 0, dist[0], q[0], ignore=ignore)
+            if self.bidi and q[1]:
                 ur = q[1].get()
-        #        print('ur', ur+1)
                 if dist[1][ur] <= estimate:
-                    self.process(ur, dist, q, proc, 1)
-                else:
-                    q[1].clear()
+                    self.process(ur, 1, dist[1], q[1], proc[1])
+                    flag = True
                 if ur in proc[0] and dist[0][ur] + dist[1][ur] < estimate:
                     estimate = dist[0][ur] + dist[1][ur]
-        return estimate if estimate < self.inf else -1
+            if self.bidi and not flag:
+                break
+        if self.bidi:
+            return -1 if estimate == self.inf else estimate
+        elif end:
+            return dist[0].get(end, self.inf)
+        else:
+            return dist[0]
+                    
 
-    def debug_string(self):
+    def process(self, node, side, dist, queue, proc=None, ignore=None):
+        node_cost = dist[node]
+        for cost, end in self.couple_edges(side, node, ignore):
+            end_cost = dist.get(end, self.inf)
+            if end_cost > cost + node_cost:
+                #self.debug_contraction(ignore, node, end, cost + node_cost)
+                dist[end] = cost + node_cost
+                queue.put((cost + node_cost, end))
+                if proc:
+                    proc.add(node)
+
+    def debug_contraction(self, through, start, end, weight):
+        print(f"contracting {through+1}\n{start+1}--{weight}-->{end+1}")
+
+    def debug_graph(self):
         for u in range(self.n):
-            for v, c in zip(self.adj[0][u], self.cost[0][u]):
-                print(u+1, v+1, c)
+            for v, c in zip(self.adj[u], self.cost[u]):
+                print(u, v, c)
 
-    def debug_added(self):
-        print(f"***added {self.added} shortcuts***")
+    def debug_added_edges(self):
+        print(f"----- added {self.shortcut_added} shortcuts -----")
 
-    def process(self, u, dist, q, proc, side):
-        dist_u = dist[side][u]
-        for c, v in self.filter_processed(side, u, u):
-            #if self.rank[v] < self.rank[u]:
-            #    continue
-            dist_v = dist[side].get(v, self.inf)
-            sum_ = dist_u + c
-            if dist_v > sum_:
-                dist[side][v] = sum_
-                q[side].put((sum_, v))
-        proc[side].add(u)
+    def debug_switch(self):
+        self.debug = True
+
+    def query(self):
+        pass
 
 
 def readl():
@@ -164,15 +172,11 @@ if __name__ == '__main__':
         cost[1][v-1].append(c)
 
     ch = DistPreprocessSmall(n, adj, cost)
+    ch.debug_switch()
     ch.preprocess()
     print("Ready")
-    ch.debug_added()
     sys.stdout.flush()
     t, = readl()
     for i in range(t):
         s, t = readl()
-        #ch.debug_string()
-        #print(s, t)
         print(ch.query(s-1, t-1))
-        #if s ==7:
-        #    break

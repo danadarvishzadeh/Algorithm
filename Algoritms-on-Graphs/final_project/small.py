@@ -42,6 +42,7 @@ class DistPreprocessSmall:
         self.n = n
         self.inf = 2 * 10**6 * n
         self.rank = [self.inf for _ in range(n)]
+        self.added = 0
 
     def preprocess(self):
         rank = 1
@@ -55,36 +56,40 @@ class DistPreprocessSmall:
         self.cost[0][u].append(c)
         self.adj[1][w].append(u)
         self.cost[1][w].append(c)
+        self.added += 1
+
+    def filter_processed(self, side, filter_, set_):
+        return list(filter(lambda x: self.rank[x[1]] > self.rank[filter_], zip(self.cost[side][set_], self.adj[side][set_])))
 
     def process_node(self, v):
-        rank_v = self.rank[v]
         tmp = 0
-        if self.cost[0][v]:
-            tmp += max(self.cost[0][v])
-        for cr, ur in zip(self.cost[1][v], self.adj[1][v]):
-            if rank_v > self.rank[ur]:
-                continue
+        prev = self.filter_processed(1, v, v)
+        after = self.filter_processed(0, v, v)
+        if after:
+            tmp += max(after)[0]
+        for cr, ur in prev:
             limit = tmp + cr
-            dist = self.pre_dij(ur, v, limit)
-            for c, u in zip(self.cost[0][v], self.adj[0][v]):
-                if rank_v > self.rank[u]:
-                    continue
+            dist = self.pre_dij(ur, v, limit, len(after), after)
+            for c, u in after:
                 if dist.get(u, self.inf) > c + cr:
                     self.add_edge(ur, u, c + cr)
             
-    def pre_dij(self, s, v, limit):
+    def pre_dij(self, s, v, limit, unknown, after):
         dist = dict()
         q = PriorityQueue()
         dist[s] = 0
         q.put((0, s))
-        while q:
+        after = set(after)
+        while q and unknown > 0:
             u = q.get()
+            if u in after:
+                unknown -= 1
             if dist[u] > limit:
                 break
             dist_u = dist[u]
-            for c, v_ in zip(self.cost[0][u], self.adj[0][u]):
-                if v_ == v:
-                    continue
+            for c, v_ in self.filter_processed(0, v, u):
+                #if v_ == v:
+                #    continue
                 dist_v_ = dist.get(v_, self.inf)
                 sum_ = dist_u + c
                 if dist_v_ > sum_:
@@ -111,8 +116,6 @@ class DistPreprocessSmall:
                     q[0].clear()
                 if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
                     estimate = dist[0][u] + dist[1][u]
-                    if estimate == 3388:
-                        print('answer:', 'u:', u+1)
             if q[1]:
                 ur = q[1].get()
         #        print('ur', ur+1)
@@ -122,8 +125,6 @@ class DistPreprocessSmall:
                     q[1].clear()
                 if ur in proc[0] and dist[0][ur] + dist[1][ur] < estimate:
                     estimate = dist[0][ur] + dist[1][ur]
-                    if estimate == 3388:
-                        print('answer:', 'ur:', ur+1)
         return estimate if estimate < self.inf else -1
 
     def debug_string(self):
@@ -131,22 +132,16 @@ class DistPreprocessSmall:
             for v, c in zip(self.adj[0][u], self.cost[0][u]):
                 print(u+1, v+1, c)
 
+    def debug_added(self):
+        print(f"***added {self.added} shortcuts***")
+
     def process(self, u, dist, q, proc, side):
         dist_u = dist[side][u]
-        #print()
-        #print('side', side)
-        for v, c in zip(self.adj[side][u], self.cost[side][u]):
-            #print('v', v+1)
-            #print('u', u+1)
-            if self.rank[v] < self.rank[u]:
-            #    print('here')
-                continue
+        for c, v in self.filter_processed(side, u, u):
+            #if self.rank[v] < self.rank[u]:
+            #    continue
             dist_v = dist[side].get(v, self.inf)
             sum_ = dist_u + c
-            #if sum_ == 3081:
-            #    print('answer:', 'u:', u+1, 'v:', v+1)
-            #if sum_ == 3388:
-            #    print('answer:', 'u:', u+1, 'v:', v+1)
             if dist_v > sum_:
                 dist[side][v] = sum_
                 q[side].put((sum_, v))
@@ -171,6 +166,7 @@ if __name__ == '__main__':
     ch = DistPreprocessSmall(n, adj, cost)
     ch.preprocess()
     print("Ready")
+    ch.debug_added()
     sys.stdout.flush()
     t, = readl()
     for i in range(t):

@@ -3,6 +3,7 @@
 
 import sys
 from heapq import heappop, heappush
+import time
 
 
 class PriorityQueue:
@@ -43,7 +44,6 @@ class DistPreprocessSmall:
         self.order = [0 for i in range(n)]
         self.rank = [0 for _ in range(n)]
         self.level = [0 for _ in range(n)]
-        self.fake = False
         self.bidi = False
         self.debug = False
 
@@ -79,7 +79,6 @@ class DistPreprocessSmall:
     def edge_difference(self, node):
         s = 0
         cover = set()
-        self.fake = True
         next_edges = self.couple_edges(0, node, node)
         previous_edges = self.couple_edges(1, node, node)
         limit = 0
@@ -87,28 +86,33 @@ class DistPreprocessSmall:
             limit = max(next_edges)[0]
         for s_cost , start in previous_edges:
             limit += s_cost
+            witness_path = self.dijkstra(start, limit=limit, ignore=node)
             for e_cost, end in next_edges:
                 shortcut_cost = s_cost + e_cost
-                witness_path = self.dijkstra(start, end, limit=limit, ignore=node)
-                if witness_path > shortcut_cost:
+                if witness_path.get(end, self.inf) > shortcut_cost:
                     s += 1
                     cover.add(start)
                     cover.add(end)
-        self.fake = False
         return s - len(self.adj[node]) - len(self.adjr[node]), len(cover)
 
     def preprocess(self):
         self.order_initialisation()
         queue = PriorityQueue()
-        rank = 0
+        rank = 1
         for i in range(self.n):
             queue.put((self.order[i], i))
         while queue:
             v = queue.simple_get()
+            print(f">>> start node {v} <<<")
+            start_time = time.time()
             self.update_order(v)
             if not queue.last(self.order[v]):
                 queue.put((self.order[v], v))
+                print(f">>> imp racomp {round(time.time() - start_time, 4)} <<<")
                 continue
+            print(f">>> imp racomp {round(time.time() - start_time, 4)} <<<")
+            start_time = time.time()
+            print('rank', rank)
             self.rank[v] = rank
             rank += 1
             next_edges = self.couple_edges(0, v, v)
@@ -116,13 +120,19 @@ class DistPreprocessSmall:
             limit = 0
             if next_edges:
                 limit = max(next_edges)[0]
+            print(f">>> next edges max {round(time.time() - start_time, 4)} <<<")
+            start_time = time.time()
             for s_cost , start in previous_edges:
                 limit += s_cost
+                witness_path = self.dijkstra(start, limit=limit, ignore=v)
+                print(f">>> dijkstra running {round(time.time() - start_time, 4)} <<<")
+                start_time = time.time()
                 for e_cost, end in next_edges:
                     shortcut_cost = s_cost + e_cost
-                    witness_path = self.dijkstra(start, end, limit=limit, ignore=v)
-                    if witness_path > shortcut_cost:
+                    if witness_path.get(end, self.inf) > shortcut_cost:
                         self.add_shortcut(start, end, shortcut_cost)
+                print(f">>> adding shortcuts {round(time.time() - start_time, 4)} <<<")
+                start_time = time.time()
             self.update_level(v)
         if self.debug:
             self.debug_added_edges()
@@ -149,7 +159,7 @@ class DistPreprocessSmall:
             return node != filter_
         return self.rank[node] > self.rank[filter_]
 
-    def dijkstra(self, start, end, ignore=None, limit=False):
+    def dijkstra(self, start, end=None, ignore=None, limit=False):
         dist = [dict()]
         q = [PriorityQueue()]
         dist[0][start] = 0
@@ -163,6 +173,9 @@ class DistPreprocessSmall:
             proc[0].add(start)
             proc[1].add(end)
             estimate = self.inf
+        if ignore is not None:
+            finding = set(self.adj[ignore])
+            found = len(finding)
         while any(q):
             if self.bidi:
                 flag = False
@@ -175,10 +188,15 @@ class DistPreprocessSmall:
                     if u in proc[1] and dist[0][u] + dist[1][u] < estimate:
                         estimate = dist[0][u] + dist[1][u]
                 else:
-                    if limit and dist[0][u] > limit:
+                    if limit is not None and dist[0][u] > limit:
                         break
-                    if end and u == end:
+                    if end is not None and u == end:
                         break
+                    if ignore is not None:
+                        if u in finding:
+                            found -= 1
+                        if found == 0:
+                            break
                     self.process(u, 0, dist[0], q[0], ignore=ignore)
             if self.bidi and q[1]:
                 ur = q[1].get()
@@ -191,7 +209,7 @@ class DistPreprocessSmall:
                 break
         if self.bidi:
             return -1 if estimate == self.inf else estimate
-        elif end >= 0:
+        elif end is not None:
             return dist[0].get(end, self.inf)
         else:
             return dist[0]

@@ -52,12 +52,12 @@ class DistPreprocessSmall:
             self.update_order(node)
 
     def update_order(self, node):
-        ed, sc = self.edge_difference(node)
-        cn = self.contracted_neighbors(node)
+        #ed, sc = self.edge_difference(node)
+        #cn = self.contracted_neighbors(node)
         l = self.level[node]
         #if self.debug:
         #    self.debug_order(node, ed, sc, cn, l)
-        self.order[node] = ed + sc + cn + l
+        self.order[node] = l
 
     def debug_order(self, node, ed, sc, cn, l):
         print(f"node : {node}")
@@ -103,16 +103,16 @@ class DistPreprocessSmall:
             queue.put((self.order[i], i))
         while queue:
             v = queue.simple_get()
-            print(f">>> start node {v} <<<")
+            #print(f">>> start node {v} <<<")
             start_time = time.time()
             self.update_order(v)
             if not queue.last(self.order[v]):
                 queue.put((self.order[v], v))
-                print(f">>> imp racomp {round(time.time() - start_time, 4)} <<<")
+                #print(f">>> imp recomp {round(time.time() - start_time, 4)} <<<")
                 continue
-            print(f">>> imp racomp {round(time.time() - start_time, 4)} <<<")
+            #print(f">>> imp recomp {round(time.time() - start_time, 4)} <<<")
             start_time = time.time()
-            print('rank', rank)
+            #print('rank', rank)
             self.rank[v] = rank
             rank += 1
             next_edges = self.couple_edges(0, v, v)
@@ -120,23 +120,23 @@ class DistPreprocessSmall:
             limit = 0
             if next_edges:
                 limit = max(next_edges)[0]
-            print(f">>> next edges max {round(time.time() - start_time, 4)} <<<")
+            #print(f">>> next edges max {round(time.time() - start_time, 4)} <<<")
             start_time = time.time()
             for s_cost , start in previous_edges:
                 limit += s_cost
                 witness_path = self.dijkstra(start, limit=limit, ignore=v)
-                print(f">>> dijkstra running {round(time.time() - start_time, 4)} <<<")
+                #print(f">>> dijkstra running {round(time.time() - start_time, 4)} <<<")
                 start_time = time.time()
                 for e_cost, end in next_edges:
                     shortcut_cost = s_cost + e_cost
                     if witness_path.get(end, self.inf) > shortcut_cost:
                         self.add_shortcut(start, end, shortcut_cost)
-                print(f">>> adding shortcuts {round(time.time() - start_time, 4)} <<<")
+                #print(f">>> adding shortcuts {round(time.time() - start_time, 4)} <<<")
                 start_time = time.time()
             self.update_level(v)
         if self.debug:
-            self.debug_added_edges()
             self.debug_graph()
+            self.debug_added_edges()
 
     def add_shortcut(self, start, end, weight):
         self.adj[start].append(end)
@@ -174,7 +174,7 @@ class DistPreprocessSmall:
             proc[1].add(end)
             estimate = self.inf
         if ignore is not None:
-            finding = set(self.adj[ignore])
+            finding = set(list(filter(lambda x: self.compare(x, ignore), self.adj[ignore])))
             found = len(finding)
         while any(q):
             if self.bidi:
@@ -239,8 +239,9 @@ class DistPreprocessSmall:
     def debug_switch(self):
         self.debug = True
 
-    def query(self):
-        pass
+    def query(self, s, t):
+        self.bidi = True
+        return self.dijkstra(s, t)
 
 
 def readl():
@@ -259,7 +260,7 @@ if __name__ == '__main__':
         cost[1][v-1].append(c)
 
     ch = DistPreprocessSmall(n, adj, cost)
-    ch.debug_switch()
+    #ch.debug_switch()
     ch.preprocess()
     print("Ready")
     sys.stdout.flush()

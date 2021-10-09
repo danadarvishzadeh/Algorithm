@@ -23,7 +23,12 @@ class PriorityQueue:
         return len(self.H) > 0
     
     def simple_get(self):
-        return heappop(self.H)
+        return heappop(self.H)[1]
+    
+    def last(self, node):
+        if self.H:
+            return node <= self.H[0][0]
+        return True
 
 
 class DistPreprocessSmall:
@@ -35,27 +40,90 @@ class DistPreprocessSmall:
         self.cost = cost[0]
         self.costr = cost[1]
         self.shortcut_added = 0
-        self.order = [i for i in range(n)]
+        self.order = [0 for i in range(n)]
+        self.rank = [0 for _ in range(n)]
+        self.level = [0 for _ in range(n)]
         self.fake = False
         self.bidi = False
+        self.debug = False
+
+    def order_initialisation(self):
+        for node in range(self.n):
+            self.update_order(node)
+
+    def update_order(self, node):
+        ed, sc = self.edge_difference(node)
+        cn = self.contracted_neighbors(node)
+        l = self.level[node]
+        #if self.debug:
+        #    self.debug_order(node, ed, sc, cn, l)
+        self.order[node] = ed + sc + cn + l
+
+    def debug_order(self, node, ed, sc, cn, l):
+        print(f"node : {node}")
+        print(f"ed : {ed}\nsc : {sc}")
+        print(f"cn : {cn}")
+        print(f"l : {l}")
+
+    def update_level(self, node):
+        for u in self.adj[node]:
+            self.level[u] = max(self.level[u], self.level[node]+1)
+
+    def contracted_neighbors(self, node):
+        contracted = 0
+        for neighbor in self.adj[node] + self.adjr[node]:
+            if self.rank[neighbor] < self.rank[node]:
+                contracted += 1
+        return contracted
+
+    def edge_difference(self, node):
+        s = 0
+        cover = set()
+        self.fake = True
+        next_edges = self.couple_edges(0, node, node)
+        previous_edges = self.couple_edges(1, node, node)
+        limit = 0
+        if next_edges:
+            limit = max(next_edges)[0]
+        for s_cost , start in previous_edges:
+            limit += s_cost
+            for e_cost, end in next_edges:
+                shortcut_cost = s_cost + e_cost
+                witness_path = self.dijkstra(start, end, limit=limit, ignore=node)
+                if witness_path > shortcut_cost:
+                    s += 1
+                    cover.add(start)
+                    cover.add(end)
+        self.fake = False
+        return s - len(self.adj[node]) - len(self.adjr[node]), len(cover)
 
     def preprocess(self):
+        self.order_initialisation()
         queue = PriorityQueue()
+        rank = 0
         for i in range(self.n):
-            queue.put((i, i))
+            queue.put((self.order[i], i))
         while queue:
-            v = queue.get()
+            v = queue.simple_get()
+            self.update_order(v)
+            if not queue.last(self.order[v]):
+                queue.put((self.order[v], v))
+                continue
+            self.rank[v] = rank
+            rank += 1
             next_edges = self.couple_edges(0, v, v)
             previous_edges = self.couple_edges(1, v, v)
+            limit = 0
             if next_edges:
-                l1 = max(next_edges)[0]
+                limit = max(next_edges)[0]
             for s_cost , start in previous_edges:
-                limit = l1 + s_cost
+                limit += s_cost
                 for e_cost, end in next_edges:
                     shortcut_cost = s_cost + e_cost
                     witness_path = self.dijkstra(start, end, limit=limit, ignore=v)
                     if witness_path > shortcut_cost:
                         self.add_shortcut(start, end, shortcut_cost)
+            self.update_level(v)
         if self.debug:
             self.debug_added_edges()
             self.debug_graph()
@@ -67,19 +135,21 @@ class DistPreprocessSmall:
         self.costr[end].append(weight)
         self.shortcut_added += 1
 
-    def couple_edges(self, side, node, filter_ = None):
+    def couple_edges(self, side, node, filter_=None):
         if side == 0:
             coupled = list(zip(self.cost[node], self.adj[node]))
         else:
             coupled = list(zip(self.costr[node], self.adjr[node]))
         if filter_ is not None:
-            coupled = list(filter(lambda x: self.compare_order(x[1], filter_), coupled))
+            coupled = list(filter(lambda x: self.compare(x[1], filter_), coupled))
         return coupled
 
-    def compare_order(self, node, filter_):
-        return self.order[node] > self.order[filter_]
+    def compare(self, node, filter_):
+        if self.rank[node] == 0:
+            return node != filter_
+        return self.rank[node] > self.rank[filter_]
 
-    def dijkstra(self, start, end, ignore=None, limit=False, bidi=False):
+    def dijkstra(self, start, end, ignore=None, limit=False):
         dist = [dict()]
         q = [PriorityQueue()]
         dist[0][start] = 0
@@ -121,7 +191,7 @@ class DistPreprocessSmall:
                 break
         if self.bidi:
             return -1 if estimate == self.inf else estimate
-        elif end:
+        elif end >= 0:
             return dist[0].get(end, self.inf)
         else:
             return dist[0]
@@ -132,7 +202,6 @@ class DistPreprocessSmall:
         for cost, end in self.couple_edges(side, node, ignore):
             end_cost = dist.get(end, self.inf)
             if end_cost > cost + node_cost:
-                #self.debug_contraction(ignore, node, end, cost + node_cost)
                 dist[end] = cost + node_cost
                 queue.put((cost + node_cost, end))
                 if proc:

@@ -43,7 +43,6 @@ class DistPreprocessSmall:
         self.order = [0 for i in range(n)]
         self.rank = [0 for _ in range(n)]
         self.level = [0 for _ in range(n)]
-        self.fake = False
         self.bidi = False
         self.debug = False
 
@@ -79,7 +78,6 @@ class DistPreprocessSmall:
     def edge_difference(self, node):
         s = 0
         cover = set()
-        self.fake = True
         next_edges = self.couple_edges(0, node, node)
         previous_edges = self.couple_edges(1, node, node)
         limit = 0
@@ -94,7 +92,6 @@ class DistPreprocessSmall:
                     s += 1
                     cover.add(start)
                     cover.add(end)
-        self.fake = False
         return s - len(self.adj[node]) - len(self.adjr[node]), len(cover)
 
     def preprocess(self):
